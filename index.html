@@ -14,6 +14,7 @@
             font-size: 16px; line-height: 1.6;
             max-width: 400px; z-index: 50;
             pointer-events: none; transition: opacity 1.5s ease;
+            opacity: 1;
         }
         
         #hud {
@@ -39,7 +40,7 @@
 </head>
 <body>
     <div id="hud">
-        LEVEL: <span id="lvlDisplay">0</span>
+        ITERATION: <span id="lvlDisplay">0</span>
         <div id="autoPilot">▶ AUTOPILOT ENGAGED</div>
     </div>
     <div id="narrative"></div>
@@ -74,15 +75,21 @@ const texts = [
 ];
 
 function updateNarrative(lvl) {
-    if (lvl < texts.length) {
+    // Se siamo oltre i testi disponibili, nascondiamo definitivamente
+    if (lvl >= texts.length) {
         narrative.style.opacity = 0;
-        setTimeout(() => {
-            narrative.innerText = texts[lvl];
-            narrative.style.opacity = 1;
-        }, 1000);
-    } else {
-        narrative.style.opacity = 0; // Scompare dopo il livello 4
+        return;
     }
+
+    // 1. Fade out (nascondi il vecchio testo)
+    narrative.style.opacity = 0;
+
+    // 2. Aspetta la fine della transizione (1.5s) per cambiare il testo
+    setTimeout(() => {
+        narrative.innerText = texts[lvl];
+        // 3. Fade in (mostra il nuovo testo)
+        narrative.style.opacity = 1;
+    }, 1500); 
 }
 
 // --- STATO GLOBALE ---
@@ -246,7 +253,7 @@ zoomBtn.addEventListener('click', () => {
 
     // AGGIUNGI QUESTA RIGA PER AGGIORNARE IL TESTO AL CAMBIO LIVELLO
     updateNarrative(level);
-    
+
     if(level >3) autoPilotDisplay.style.display = 'block';
 });
 
