@@ -3,10 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Void Genesis - True Recursion</title>
+    <title>Void Genesis - Infinity</title>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; touch-action: none; }
+        body { margin: 0; background: #000; overflow: hidden; touch-action: none; font-family: monospace; }
         canvas { display: block; width: 100%; height: 100%; }
+        
+        #hud {
+            position: absolute; top: 20px; left: 20px; color: rgba(255, 255, 255, 0.7);
+            font-size: 16px; z-index: 10; pointer-events: none;
+        }
+        #autoPilot { color: #0f0; font-size: 12px; display: none; margin-top: 5px; text-shadow: 0 0 5px #0f0; }
         
         #zoomBtn {
             position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%) scale(0.8);
@@ -24,6 +30,10 @@
     </style>
 </head>
 <body>
+    <div id="hud">
+        LEVEL: <span id="lvlDisplay">0</span>
+        <div id="autoPilot">▶ AUTOPILOT ENGAGED</div>
+    </div>
     <div id="zoomBtn"><span>*</span></div>
     <canvas id="canvas"></canvas>
 
@@ -31,6 +41,8 @@
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 const zoomBtn = document.getElementById('zoomBtn');
+const lvlDisplay = document.getElementById('lvlDisplay');
+const autoPilotDisplay = document.getElementById('autoPilot');
 
 function adjustCanvasResolution() {
     const dpr = window.devicePixelRatio || 1;
@@ -44,17 +56,17 @@ adjustCanvasResolution();
 // --- STATO GLOBALE ---
 let level = 0;
 let currentWorld = { entities: [], groups: [] };
-let blueprintWorld = null; // Memorizza la matrice per i cloni
+let blueprintWorld = null; 
 let blueprintRadius = 0;
 
 let isDrawing = false;
 let currentPath = [];
 let isZooming = false;
 let zoomProgress = 0;
-let targetZoomScale = 1; // Calcolato dinamicamente
+let targetZoomScale = 1;
+let autoZoomingStarted = false;
 
-// --- LOGICA MONDI E CLONAZIONE ---
-// Clona in profondità (Deep Clone) un intero mondo per ricrearlo nei tap successivi
+// --- UTILITY E CLONAZIONE ---
 function cloneWorld(world) {
     let newWorld = { entities: [], groups: [] };
     let map = new Map();
@@ -83,7 +95,6 @@ function cloneWorld(world) {
     return newWorld;
 }
 
-// Calcola il rettangolo che contiene tutti gli oggetti di un mondo
 function getBoundingBox(entities) {
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     entities.forEach(p => {
@@ -94,9 +105,9 @@ function getBoundingBox(entities) {
     return { minX, maxX, minY, maxY, cx: (minX + maxX)/2, cy: (minY + maxY)/2 };
 }
 
-// --- INTERAZIONE UTENTE ---
+// --- INTERAZIONE MANUALE ---
 canvas.addEventListener('touchstart', (e) => {
-    if (isZooming) return;
+    if (isZooming || level >= 5) return; // Disabilita input manuale quando c'è l'autopilota
     let t = e.touches[0];
     
     if (level === 0) {
@@ -104,7 +115,6 @@ canvas.addEventListener('touchstart', (e) => {
         isDrawing = true;
         currentPath = [{x: t.clientX, y: t.clientY}];
     } else {
-        // Al tap (livelli > 0), spawna una simulazione completa già stabile
         currentWorld.entities.push({
             type: 'system', x: t.clientX, y: t.clientY,
             vx: (Math.random()-0.5)*0.2, vy: (Math.random()-0.5)*0.2,
@@ -146,18 +156,16 @@ function isPointInPolygon(point, vs) {
     return inside;
 }
 
-// --- LOGICA ZOOM E RICORSIONE ---
+// --- LOGICA ZOOM E RICORSIONE/SEMPLIFICAZIONE ---
 zoomBtn.addEventListener('click', () => {
     if(isZooming) return;
     isZooming = true;
     zoomBtn.classList.remove('visible');
 
-    // 1. Ricalcola le coordinate per centrare l'universo attuale a (0,0)
     let bbox = getBoundingBox(currentWorld.entities);
     currentWorld.entities.forEach(e => { e.x -= bbox.cx; e.y -= bbox.cy; });
     currentWorld.groups.forEach(g => { g.bubble.x -= bbox.cx; g.bubble.y -= bbox.cy; });
 
-    // 2. Calcola il nuovo raggio interno basato sull'oggetto più distante
     let maxDist = 0;
     currentWorld.entities.forEach(e => {
         let d = Math.hypot(e.x, e.y);
@@ -165,26 +173,49 @@ zoomBtn.addEventListener('click', () => {
     });
     blueprintRadius = maxDist + 50; 
     
-    // 3. Salva la matrice
-    blueprintWorld = cloneWorld(currentWorld);
-    
-    // 4. Crea la super-entità che conterra il vecchio mondo
-    let sys = {
-        type: 'system',
-        x: window.innerWidth / 2, y: window.innerHeight / 2,
-        vx: 0, vy: 0, radius: 40, innerRadius: blueprintRadius,
-        innerWorld: currentWorld
-    };
+    // SEMPLIFICAZIONE A PARTIRE DAL LIVELLO 3 (Per il livello 4+)
+    if (level >= 3) {
+        let dots = [];
+        for (let i = 0; i < 40; i++) {
+            // Crea puntini "eterni" per simulare rumore bianco interno
+            dots.push({
+                type: 'point',
+                x: (Math.random() - 0.5) * (blueprintRadius * 0.8),
+                y: (Math.random() - 0.5) * (blueprintRadius * 0.8),
+                vx: (Math.random() - 0.5) * 1.5,
+                vy: (Math.random() - 0.5) * 1.5,
+                birth: Date.now(), baseSize: 2.5, size: 2.5, lifeSpan: Infinity
+            });
+        }
+        let simplifiedWorld = { entities: dots, groups: [] };
+        
+        blueprintWorld = cloneWorld(simplifiedWorld);
+        let sys = {
+            type: 'system', x: window.innerWidth / 2, y: window.innerHeight / 2,
+            vx: 0, vy: 0, radius: 40, innerRadius: blueprintRadius,
+            innerWorld: cloneWorld(simplifiedWorld)
+        };
+        currentWorld = { entities: [sys], groups: [] };
+    } else {
+        // Comportamento standard ricorsivo
+        blueprintWorld = cloneWorld(currentWorld);
+        let sys = {
+            type: 'system', x: window.innerWidth / 2, y: window.innerHeight / 2,
+            vx: 0, vy: 0, radius: 40, innerRadius: blueprintRadius,
+            innerWorld: currentWorld
+        };
+        currentWorld = { entities: [sys], groups: [] };
+    }
 
-    targetZoomScale = sys.radius / sys.innerRadius;
-    currentWorld = { entities: [sys], groups: [] };
+    targetZoomScale = currentWorld.entities[0].radius / blueprintRadius;
     level++;
     zoomProgress = 0;
+    lvlDisplay.innerText = level;
+    if(level >= 5) autoPilotDisplay.style.display = 'block';
 });
 
-// --- MOTORE FISICO RICORSIVO ---
+// --- MOTORE FISICO ---
 function updateWorld(world, isRoot, bW, bH, bRadius) {
-    // Autoconnessione dei sistemi solo a livello root (magnetismo)
     if (isRoot && level > 0 && Math.random() < 0.1) {
         let freeSystems = world.entities.filter(e => e.type === 'system' && !e.groupId);
         for(let i = 0; i < freeSystems.length; i++) {
@@ -199,12 +230,10 @@ function updateWorld(world, isRoot, bW, bH, bRadius) {
     world.entities = world.entities.filter(e => {
         e.x += e.vx; e.y += e.vy;
         
-        // Gestione bordi
         if (isRoot) {
             if(e.x < 10 || e.x > bW - 10) e.vx *= -1;
             if(e.y < 10 || e.y > bH - 10) e.vy *= -1;
         } else {
-            // Nei mondi interni le entità rimbalzano contro il limite sferico del loro universo
             let dist = Math.hypot(e.x, e.y);
             if (dist > bRadius - 5) {
                 let angle = Math.atan2(e.y, e.x);
@@ -214,14 +243,12 @@ function updateWorld(world, isRoot, bW, bH, bRadius) {
         }
 
         if (e.type === 'point') {
+            if (e.lifeSpan === Infinity) return true; // I punti semplificati non muoiono
             let life = 1 - ((Date.now() - e.birth) / e.lifeSpan);
             e.size = Math.max(0, e.baseSize * life);
             return e.size > 0;
         } else {
-            // VERA RICORSIONE: Aggiorna l'universo interno
             updateWorld(e.innerWorld, false, 0, 0, e.innerRadius);
-            
-            // MORTE: Se l'universo interno si è estinto, la bolla si restringe e sparisce
             if (e.innerWorld.entities.length === 0) e.radius -= 0.5;
             return e.radius > 0;
         }
@@ -231,7 +258,6 @@ function updateWorld(world, isRoot, bW, bH, bRadius) {
         g.entities = g.entities.filter(e => (e.type === 'point' ? e.size > 0 : e.radius > 0));
         if (g.entities.length === 0) return false;
 
-        // Riproduzione
         let repTime = 3000 + (g.entities.length * 150);
         if (Date.now() - g.lastReproduction > repTime) {
             let angle = Math.random() * Math.PI * 2;
@@ -251,11 +277,11 @@ function updateWorld(world, isRoot, bW, bH, bRadius) {
     });
 }
 
-// --- RENDER RICORSIVO ---
+// --- RENDER ---
 function drawWorld(context, world, renderScale) {
     world.groups.forEach(g => {
         context.strokeStyle = `rgba(150, 150, 150, ${Math.min(1, 0.4 * renderScale)})`;
-        context.lineWidth = 1 / renderScale; // Mantiene lo spessore delle linee costante nonostante lo zoom
+        context.lineWidth = 1 / renderScale;
         context.beginPath();
         let maxLines = Math.min(g.entities.length * 2, 50); 
         for(let k=0; k<maxLines; k++) {
@@ -282,7 +308,6 @@ function drawWorld(context, world, renderScale) {
             context.fillStyle = '#FFF';
             context.beginPath(); context.arc(e.x, e.y, e.size, 0, Math.PI*2); context.fill();
         } else {
-            // VERO RENDER DEL SISTEMA
             context.strokeStyle = 'rgba(255,255,255,0.9)';
             context.lineWidth = 2 / renderScale;
             context.beginPath(); context.arc(e.x, e.y, e.radius, 0, Math.PI*2); context.stroke();
@@ -290,10 +315,7 @@ function drawWorld(context, world, renderScale) {
             context.save();
             context.translate(e.x, e.y);
             context.beginPath(); context.arc(0, 0, e.radius, 0, Math.PI*2); context.clip();
-            
-            // Maschera nera per oscurare lo sfondo sottostante
-            context.fillStyle = '#050505'; 
-            context.fill();
+            context.fillStyle = '#050505'; context.fill();
 
             let innerScale = e.radius / e.innerRadius;
             context.scale(innerScale, innerScale);
@@ -316,22 +338,44 @@ function animate() {
         ctx.translate(window.innerWidth/2, window.innerHeight/2);
         ctx.scale(currentScale, currentScale);
         ctx.translate(-window.innerWidth/2, -window.innerHeight/2);
-        drawWorld(ctx, currentWorld.entities[0].innerWorld, currentScale); // Disegna il mondo vecchio che rimpicciolisce
+        drawWorld(ctx, currentWorld.entities[0].innerWorld, currentScale);
         ctx.restore();
 
-        if (zoomProgress >= 1) isZooming = false;
+        if (zoomProgress >= 1) {
+            isZooming = false;
+            autoZoomingStarted = false;
+        }
         requestAnimationFrame(animate); return;
     }
 
-    // Loop Aggiornamento
     updateWorld(currentWorld, true, window.innerWidth, window.innerHeight, 0);
 
-    // Gestione Stabilità
     let stable = currentWorld.groups.some(g => (Date.now() - g.birth > 12000 && g.entities.length >= 2));
-    if (stable && !isZooming) zoomBtn.classList.add('visible');
-    else zoomBtn.classList.remove('visible');
+    
+    // --- GESTIONE AUTOPILOTA (Livello 5+) ---
+    if (level >= 5) {
+        if (stable) {
+            if (!autoZoomingStarted) {
+                autoZoomingStarted = true;
+                setTimeout(() => zoomBtn.click(), 1500); // Zoom automatico ritardato per godersi la vista
+            }
+        } else if (Math.random() < 0.04) { 
+            // Tap automatici sparsi nello schermo
+            let tx = 40 + Math.random() * (window.innerWidth - 80);
+            let ty = 40 + Math.random() * (window.innerHeight - 80);
+            currentWorld.entities.push({
+                type: 'system', x: tx, y: ty,
+                vx: (Math.random()-0.5)*0.2, vy: (Math.random()-0.5)*0.2,
+                radius: 40, innerRadius: blueprintRadius,
+                innerWorld: cloneWorld(blueprintWorld)
+            });
+        }
+    } else {
+        // UI manuale per livelli inferiori
+        if (stable && !isZooming) zoomBtn.classList.add('visible');
+        else zoomBtn.classList.remove('visible');
+    }
 
-    // Traccia disegno
     if (isDrawing && currentPath.length > 1) {
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'; ctx.lineWidth = 1; ctx.beginPath();
         ctx.moveTo(currentPath[0].x, currentPath[0].y);
