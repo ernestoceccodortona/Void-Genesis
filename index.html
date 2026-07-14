@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Void Genesis</title>
+    <title>Void Genesis - Bubble</title>
     <style>
         body { margin: 0; background: #000; overflow: hidden; touch-action: none; }
-        canvas { display: block; }
+        canvas { display: block; width: 100%; height: 100%; }
     </style>
 </head>
 <body>
@@ -15,35 +15,60 @@
 <script>
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
+
+// Gestione HDPI/Retina display per grafica nitida
+function adjustCanvasResolution() {
+    const dpr = window.devicePixelRatio || 1;
+    const displayWidth = window.innerWidth;
+    const displayHeight = window.innerHeight;
+    
+    // Imposta la risoluzione interna del canvas
+    canvas.width = displayWidth * dpr;
+    canvas.height = displayHeight * dpr;
+    
+    // Scala il contesto per compensare
+    ctx.scale(dpr, dpr);
+    
+    // Forza l'aliasing netto (niente sfocature)
+    ctx.imageSmoothingEnabled = false;
+}
+
 let points = [];
 let groups = [];
 let isDrawing = false;
 let currentPath = [];
 
-// Setup Canvas
-function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
-window.addEventListener('resize', resize);
-resize();
+window.addEventListener('resize', adjustCanvasResolution);
+adjustCanvasResolution(); // Imposta risoluzione iniziale
 
 class Point {
     constructor(x, y, groupId = null) {
-        this.x = x;
-        this.y = y;
-        this.vx = (Math.random() - 0.5) * 0.5;
-        this.vy = (Math.random() - 0.5) * 0.5;
+        // Arrotondiamo le coordinate iniziali per evitare sub-pixel rendering
+        this.x = Math.round(x);
+        this.y = Math.round(y);
+        this.vx = (Math.random() - 0.5) * 0.4;
+        this.vy = (Math.random() - 0.5) * 0.4;
         this.birth = Date.now();
-        this.lifeSpan = 10000; // 10 secondi
-        this.size = 3;
+        this.lifeSpan = 10000; 
+        this.baseSize = 2.5; // Leggermente più grande
+        this.size = this.baseSize;
         this.groupId = groupId;
     }
     update() {
         this.x += this.vx;
         this.y += this.vy;
+        
+        // Rimbalzo semplice sui bordi per non farli uscire
+        if(this.x < 0 || this.x > window.innerWidth) this.vx *= -1;
+        if(this.y < 0 || this.y > window.innerHeight) this.vy *= -1;
+
         let age = Date.now() - this.birth;
         let remaining = 1 - (age / this.lifeSpan);
-        this.size = Math.max(0, 3 * remaining);
-        if (remaining <= 0) return false; // Dead
-        return true;
+        
+        // Calcolo dimensione arrotondato per pixel perfect
+        this.size = Math.max(0, Math.round(this.baseSize * remaining * 10) / 10);
+        
+        return this.size > 0;
     }
 }
 
@@ -51,6 +76,7 @@ class Point {
 canvas.addEventListener('touchstart', (e) => {
     let touch = e.touches[0];
     if (e.touches.length === 1) {
+        // Aggiungi punto singolo
         points.push(new Point(touch.clientX, touch.clientY));
     }
     isDrawing = true;
@@ -66,16 +92,31 @@ canvas.addEventListener('touchmove', (e) => {
 canvas.addEventListener('touchend', () => {
     isDrawing = false;
     if (currentPath.length > 5) {
-        // Verifica quali punti sono dentro il percorso (Ray Casting)
-        let newGroup = [];
+        let newGroupPoints = [];
         points.forEach(p => {
-            if (isPointInPolygon(p, currentPath)) {
-                let id = Date.now();
-                p.groupId = id;
-                newGroup.push(p);
+            // Controlla se il punto è libero e dentro il cerchiamento
+            if (!p.groupId && isPointInPolygon(p, currentPath)) {
+                newGroupPoints.push(p);
             }
         });
-        if (newGroup.length > 1) groups.push({id: Date.now(), points: newGroup, lastReproduction: Date.now()});
+        
+        if (newGroupPoints.length > 1) {
+            const groupId = Date.now();
+            newGroupPoints.forEach(p => p.groupId = groupId);
+            
+            // Calcola centro e raggio approssimativo della bolla
+            let bounds = getBoundingBox(newGroupPoints);
+            let centerX = (bounds.minX + bounds.maxX) / 2;
+            let centerY = (bounds.minY + bounds.maxY) / 2;
+            let radius = Math.max(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY) / 2 + 20;
+
+            groups.push({
+                id: groupId, 
+                points: newGroupPoints, 
+                lastReproduction: Date.now(),
+                bubble: { x: centerX, y: centerY, radius: radius, pulse: 0 }
+            });
+        }
     }
     currentPath = [];
 });
@@ -92,57 +133,126 @@ function isPointInPolygon(point, vs) {
     return inside;
 }
 
+function getBoundingBox(pts) {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    pts.forEach(p => {
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
+    });
+    return {minX, maxX, minY, maxY};
+}
+
 function animate() {
-    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    // Pulisci schermo con dissolvenza (leggermente più scura per effetto scia)
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Gestione Gruppi e Riproduzione
-    groups.forEach((g, gIdx) => {
-        // Verifica vita gruppo
-        g.points = g.points.filter(p => p.size > 0);
-        if (g.points.length === 0) { groups.splice(gIdx, 1); return; }
-
-        // Riproduzione (ogni 3 secondi)
-        if (Date.now() - g.lastReproduction > 3000) {
-            let p = g.points[Math.floor(Math.random() * g.points.length)];
-            points.push(new Point(p.x + Math.random()*20, p.y + Math.random()*20, g.id));
-            g.points.push(points[points.length-1]);
-            g.lastReproduction = Date.now();
-        }
-
-        // Connessioni
-        ctx.strokeStyle = 'rgba(200, 200, 200, 0.3)';
+    // Disegno traccia utente (momentanea)
+    if (isDrawing && currentPath.length > 1) {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.lineWidth = 1;
         ctx.beginPath();
-        for(let i=0; i<g.points.length; i++) {
-            for(let j=i+1; j<g.points.length; j++) {
-                ctx.moveTo(g.points[i].x, g.points[i].y);
-                ctx.lineTo(g.points[j].x, g.points[j].y);
-            }
+        ctx.moveTo(currentPath[0].x, currentPath[0].y);
+        for(let i=1; i<currentPath.length; i+=2) { // Ottimizzazione: salta punti
+            ctx.lineTo(currentPath[i].x, currentPath[i].y);
         }
         ctx.stroke();
-    });
+    }
 
-    // Disegno Punti
-    points = points.filter(p => p.update());
-    points.forEach(p => {
-        ctx.fillStyle = 'white';
+    // Aggiorna e Disegno Punti Liberi
+    let freePoints = points.filter(p => p.groupId === null);
+    points = points.filter(p => p.update()); // Aggiorna tutti, rimuovi morti
+    
+    ctx.fillStyle = 'white';
+    freePoints.forEach(p => {
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        // Arrotondiamo per il pixel perfect
+        ctx.arc(Math.round(p.x), Math.round(p.y), p.size, 0, Math.PI * 2);
         ctx.fill();
     });
 
-    // Disegno traccia utente
-    if (isDrawing) {
-        ctx.strokeStyle = 'white';
+    // Gestione Gruppi, Riproduzione e Bolle
+    for (let i = groups.length - 1; i >= 0; i--) {
+        let g = groups[i];
+        
+        // Filtra i punti morti dal gruppo
+        g.points = g.points.filter(p => p.size > 0);
+        
+        if (g.points.length === 0) {
+            groups.splice(i, 1);
+            continue;
+        }
+
+        // --- Logica Bolla (Bubble) ---
+        if (g.points.length > 1) {
+            // Ricalcola centro e raggio in base alla posizione attuale dei punti
+            let bounds = getBoundingBox(g.points);
+            g.realCenterX = (bounds.minX + bounds.maxX) / 2;
+            g.realCenterY = (bounds.minY + bounds.maxY) / 2;
+            let targetRadius = Math.max(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY) / 2 + 15;
+            
+            // Smussamento del movimento della bolla
+            g.bubble.x += (g.realCenterX - g.bubble.x) * 0.1;
+            g.bubble.y += (g.realCenterY - g.bubble.y) * 0.1;
+            g.bubble.radius += (targetRadius - g.bubble.radius) * 0.1;
+
+            // Effetto respiro (pulsazione leggera basata sul numero di punti)
+            g.bubble.pulse = Math.sin(Date.now() / 500) * (g.points.length * 0.2);
+
+            // Disegno Bolla
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)'; // Bordo bianco semi-trasparente
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(Math.round(g.bubble.x), Math.round(g.bubble.y), Math.max(10, g.bubble.radius + g.bubble.pulse), 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        // ---------------------------
+
+        // Riproduzione (rallentata se il gruppo è grande)
+        let reproduceTime = 3000 + (g.points.length * 100);
+        if (Date.now() - g.lastReproduction > reproduceTime) {
+            let p = g.points[Math.floor(Math.random() * g.points.length)];
+            // Genera leggermente fuori dal bordo del gruppo
+            let angle = Math.random() * Math.PI * 2;
+            let dist = g.bubble.radius + 10;
+            let newP = new Point(g.bubble.x + Math.cos(angle)*dist, g.bubble.y + Math.sin(angle)*dist, g.id);
+            points.push(newP);
+            g.points.push(newP);
+            g.lastReproduction = Date.now();
+        }
+
+        // Connessioni interne (linee grigie)
+        ctx.strokeStyle = 'rgba(150, 150, 150, 0.2)';
+        ctx.lineWidth = 0.5;
         ctx.beginPath();
-        currentPath.forEach((p, i) => i===0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+        // Ottimizzazione: non collegare tutti con tutti se troppi, cala il framerate
+        let maxLines = Math.min(g.points.length * 3, 100); 
+        for(let k=0; k<maxLines; k++) {
+            let iIdx = Math.floor(Math.random() * g.points.length);
+            let jIdx = Math.floor(Math.random() * g.points.length);
+            if(iIdx !== jIdx) {
+                ctx.moveTo(Math.round(g.points[iIdx].x), Math.round(g.points[iIdx].y));
+                ctx.lineTo(Math.round(g.points[jIdx].x), Math.round(g.points[jIdx].y));
+            }
+        }
         ctx.stroke();
+        
+        // Disegno Punti del gruppo
+        ctx.fillStyle = 'white';
+        g.points.forEach(p => {
+            ctx.beginPath();
+            ctx.arc(Math.round(p.x), Math.round(p.y), p.size, 0, Math.PI * 2);
+            ctx.fill();
+        });
     }
 
     requestAnimationFrame(animate);
 }
 
-animate();
+// Avvio
+requestAnimationFrame(animate);
 </script>
 </body>
 </html>
