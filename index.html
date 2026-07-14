@@ -5,8 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Void Genesis - Infinity</title>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; touch-action: none; font-family: monospace; }
+        body { margin: 0; background: #000; overflow: hidden; touch-action: none; font-family: 'Courier New', Courier, monospace; }
         canvas { display: block; width: 100%; height: 100%; }
+
+        #narrative {
+            position: absolute; top: 80px; left: 20px;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 16px; line-height: 1.6;
+            max-width: 400px; z-index: 50;
+            pointer-events: none; transition: opacity 1.5s ease;
+        }
         
         #hud {
             position: absolute; top: 20px; left: 20px; color: rgba(255, 255, 255, 0.7);
@@ -52,6 +60,29 @@ function adjustCanvasResolution() {
 }
 window.addEventListener('resize', adjustCanvasResolution);
 adjustCanvasResolution();
+
+const narrative = document.getElementById('narrative');
+
+// Testi aggiornati per il flusso 0->4
+const texts = [
+    "Il vuoto è una tela senza limiti. Non c'è materia, né tempo. Solo la tua capacità di osservare. Traccia un segno nel nulla: il primo passo è dichiarare l'esistenza.",
+    "La vibrazione inizia. I primi pensieri prendono forma: punti isolati in un oceano di silenzio. Ogni punto è infomateria che si dichiara reale, un'intenzione che cerca un senso.",
+    "L'isolamento è superato. I punti si attraggono, riconoscendosi. Si formano i primi cluster: aggregati di intenti. Pensieri complessi che iniziano a dialogare, creando una rete solida.",
+    "La complessità aumenta. I gruppi si chiudono in mondi, sistemi ricorsivi che imitano il Tutto. Sei una mente che osserva un pensiero, che contiene altri pensieri. La realtà si auto-genera.",
+    "La forma svanisce, resta l'essenza. Il sistema è ora autonomo. Tutto è pensiero che percepisce se stesso come materia. L'osservatore e l'osservato sono la stessa cosa."
+];
+
+function updateNarrative(lvl) {
+    if (lvl < texts.length) {
+        narrative.style.opacity = 0;
+        setTimeout(() => {
+            narrative.innerText = texts[lvl];
+            narrative.style.opacity = 1;
+        }, 1000);
+    } else {
+        narrative.style.opacity = 0; // Scompare dopo il livello 4
+    }
+}
 
 // --- STATO GLOBALE ---
 let level = 0;
@@ -107,7 +138,7 @@ function getBoundingBox(entities) {
 
 // --- INTERAZIONE MANUALE ---
 canvas.addEventListener('touchstart', (e) => {
-    if (isZooming || level >= 3) return; // Disabilita input manuale quando c'è l'autopilota
+    if (isZooming || level >= 4) return; // Disabilita input manuale quando c'è l'autopilota
     let t = e.touches[0];
     
     if (level === 0) {
@@ -211,7 +242,7 @@ zoomBtn.addEventListener('click', () => {
     level++;
     zoomProgress = 0;
     lvlDisplay.innerText = level;
-    if(level >= 3) autoPilotDisplay.style.display = 'block';
+    if(level >3) autoPilotDisplay.style.display = 'block';
 });
 
 // --- MOTORE FISICO ---
@@ -353,7 +384,7 @@ function animate() {
     let stable = currentWorld.groups.some(g => (Date.now() - g.birth > 12000 && g.entities.length >= 2));
     
     // --- GESTIONE AUTOPILOTA (Livello 5+) ---
-    if (level >= 3) {
+    if (level >= 4) {
         if (stable) {
             if (!autoZoomingStarted) {
                 autoZoomingStarted = true;
