@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Void Genesis</title>
+    <style>
+        body { margin: 0; background: #000; overflow: hidden; touch-action: none; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let points = [];
+let groups = [];
+let isDrawing = false;
+let currentPath = [];
+
+// Setup Canvas
+function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+window.addEventListener('resize', resize);
+resize();
+
+class Point {
+    constructor(x, y, groupId = null) {
+        this.x = x;
+        this.y = y;
+        this.vx = (Math.random() - 0.5) * 0.5;
+        this.vy = (Math.random() - 0.5) * 0.5;
+        this.birth = Date.now();
+        this.lifeSpan = 10000; // 10 secondi
+        this.size = 3;
+        this.groupId = groupId;
+    }
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        let age = Date.now() - this.birth;
+        let remaining = 1 - (age / this.lifeSpan);
+        this.size = Math.max(0, 3 * remaining);
+        if (remaining <= 0) return false; // Dead
+        return true;
+    }
+}
+
+// Interazione Touch
+canvas.addEventListener('touchstart', (e) => {
+    let touch = e.touches[0];
+    if (e.touches.length === 1) {
+        points.push(new Point(touch.clientX, touch.clientY));
+    }
+    isDrawing = true;
+    currentPath = [{x: touch.clientX, y: touch.clientY}];
+});
+
+canvas.addEventListener('touchmove', (e) => {
+    if (isDrawing) {
+        currentPath.push({x: e.touches[0].clientX, y: e.touches[0].clientY});
+    }
+});
+
+canvas.addEventListener('touchend', () => {
+    isDrawing = false;
+    if (currentPath.length > 5) {
+        // Verifica quali punti sono dentro il percorso (Ray Casting)
+        let newGroup = [];
+        points.forEach(p => {
+            if (isPointInPolygon(p, currentPath)) {
+                let id = Date.now();
+                p.groupId = id;
+                newGroup.push(p);
+            }
+        });
+        if (newGroup.length > 1) groups.push({id: Date.now(), points: newGroup, lastReproduction: Date.now()});
+    }
+    currentPath = [];
+});
+
+function isPointInPolygon(point, vs) {
+    let x = point.x, y = point.y;
+    let inside = false;
+    for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+        let xi = vs[i].x, yi = vs[i].y;
+        let xj = vs[j].x, yj = vs[j].y;
+        let intersect = ((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+    }
+    return inside;
+}
+
+function animate() {
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Gestione Gruppi e Riproduzione
+    groups.forEach((g, gIdx) => {
+        // Verifica vita gruppo
+        g.points = g.points.filter(p => p.size > 0);
+        if (g.points.length === 0) { groups.splice(gIdx, 1); return; }
+
+        // Riproduzione (ogni 3 secondi)
+        if (Date.now() - g.lastReproduction > 3000) {
+            let p = g.points[Math.floor(Math.random() * g.points.length)];
+            points.push(new Point(p.x + Math.random()*20, p.y + Math.random()*20, g.id));
+            g.points.push(points[points.length-1]);
+            g.lastReproduction = Date.now();
+        }
+
+        // Connessioni
+        ctx.strokeStyle = 'rgba(200, 200, 200, 0.3)';
+        ctx.beginPath();
+        for(let i=0; i<g.points.length; i++) {
+            for(let j=i+1; j<g.points.length; j++) {
+                ctx.moveTo(g.points[i].x, g.points[i].y);
+                ctx.lineTo(g.points[j].x, g.points[j].y);
+            }
+        }
+        ctx.stroke();
+    });
+
+    // Disegno Punti
+    points = points.filter(p => p.update());
+    points.forEach(p => {
+        ctx.fillStyle = 'white';
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+    });
+
+    // Disegno traccia utente
+    if (isDrawing) {
+        ctx.strokeStyle = 'white';
+        ctx.beginPath();
+        currentPath.forEach((p, i) => i===0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+        ctx.stroke();
+    }
+
+    requestAnimationFrame(animate);
+}
+
+animate();
+</script>
+</body>
+</html>
