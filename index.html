@@ -243,6 +243,10 @@ zoomBtn.addEventListener('click', () => {
     level++;
     zoomProgress = 0;
     lvlDisplay.innerText = level;
+
+    // AGGIUNGI QUESTA RIGA PER AGGIORNARE IL TESTO AL CAMBIO LIVELLO
+    updateNarrative(level);
+    
     if(level >3) autoPilotDisplay.style.display = 'block';
 });
 
@@ -416,6 +420,7 @@ function animate() {
     }
 
     drawWorld(ctx, currentWorld, 1);
+    updateNarrative(0); // Aggiungi questa riga!
     requestAnimationFrame(animate);
 }
 
