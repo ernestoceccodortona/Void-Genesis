@@ -107,7 +107,7 @@ function getBoundingBox(entities) {
 
 // --- INTERAZIONE MANUALE ---
 canvas.addEventListener('touchstart', (e) => {
-    if (isZooming || level >= 4) return; // Disabilita input manuale quando c'è l'autopilota
+    if (isZooming || level >= 3) return; // Disabilita input manuale quando c'è l'autopilota
     let t = e.touches[0];
     
     if (level === 0) {
@@ -211,7 +211,7 @@ zoomBtn.addEventListener('click', () => {
     level++;
     zoomProgress = 0;
     lvlDisplay.innerText = level;
-    if(level >= 4) autoPilotDisplay.style.display = 'block';
+    if(level >= 3) autoPilotDisplay.style.display = 'block';
 });
 
 // --- MOTORE FISICO ---
@@ -353,7 +353,7 @@ function animate() {
     let stable = currentWorld.groups.some(g => (Date.now() - g.birth > 12000 && g.entities.length >= 2));
     
     // --- GESTIONE AUTOPILOTA (Livello 5+) ---
-    if (level >= 4) {
+    if (level >= 3) {
         if (stable) {
             if (!autoZoomingStarted) {
                 autoZoomingStarted = true;
