@@ -27,15 +27,6 @@
         }
         #zoomBtn.visible { opacity: 1; pointer-events: all; transform: translateX(-50%) scale(1); }
         #zoomBtn span { margin-top: 15px; }
-        #narrative {
-    position: absolute; top: 80px; left: 20px; right: 20px;
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 16px; line-height: 1.6;
-    z-index: 5; /* Sotto i bottoni, sopra il canvas */
-    pointer-events: none; /* Fondamentale: ignora i tocchi */
-    font-family: monospace;
-    transition: opacity 1.5s ease;
-}
     </style>
 </head>
 <body>
@@ -52,27 +43,6 @@ const ctx = canvas.getContext('2d');
 const zoomBtn = document.getElementById('zoomBtn');
 const lvlDisplay = document.getElementById('lvlDisplay');
 const autoPilotDisplay = document.getElementById('autoPilot');
-
-const texts = [
-    "Il vuoto è una tela senza limiti. Non c'è materia, né tempo. Solo la tua capacità di osservare. Traccia un segno nel nulla: il primo passo è dichiarare l'esistenza.",
-    "La vibrazione inizia. I primi pensieri prendono forma: punti isolati in un oceano di silenzio. Ogni punto è infomateria che si dichiara reale, un'intenzione che cerca un senso.",
-    "L'isolamento è superato. I punti si attraggono, riconoscendosi. Si formano i primi cluster: aggregati di intenti. Pensieri complessi che iniziano a dialogare, creando una rete solida.",
-    "La complessità aumenta. I gruppi si chiudono in mondi, sistemi ricorsivi che imitano il Tutto. Sei una mente che osserva un pensiero, che contiene altri pensieri. La realtà si auto-genera.",
-    "La forma svanisce, resta l'essenza. Il sistema è ora autonomo. Tutto è pensiero che percepisce se stesso come materia. L'osservatore e l'osservato sono la stessa cosa."
-];
-
-function updateNarrative(lvl) {
-    const el = document.getElementById('narrative');
-    if (lvl < texts.length) {
-        el.style.opacity = 0;
-        setTimeout(() => {
-            el.innerText = texts[lvl];
-            el.style.opacity = 1;
-        }, 500);
-    } else {
-        el.style.opacity = 0; // Scompare dopo il livello 4
-    }
-}
 
 function adjustCanvasResolution() {
     const dpr = window.devicePixelRatio || 1;
@@ -239,10 +209,9 @@ zoomBtn.addEventListener('click', () => {
 
     targetZoomScale = currentWorld.entities[0].radius / blueprintRadius;
     level++;
-    updateNarrative(level);
     zoomProgress = 0;
     lvlDisplay.innerText = level;
-    if(level >=4) autoPilotDisplay.style.display = 'block';
+    if(level >= 4) autoPilotDisplay.style.display = 'block';
 });
 
 // --- MOTORE FISICO ---
