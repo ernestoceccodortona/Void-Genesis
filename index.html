@@ -75,19 +75,17 @@ const texts = [
 ];
 
 function updateNarrative(lvl) {
-    // Se siamo oltre i testi disponibili, nascondiamo definitivamente
     if (lvl >= texts.length) {
         narrative.style.opacity = 0;
         return;
     }
-
-    // 1. Fade out (nascondi il vecchio testo)
+    // Fade out (lo rendiamo invisibile)
     narrative.style.opacity = 0;
-
-    // 2. Aspetta la fine della transizione (1.5s) per cambiare il testo
+    
+    // Aspettiamo che la transizione finisca (1.5s) per cambiare il testo
     setTimeout(() => {
         narrative.innerText = texts[lvl];
-        // 3. Fade in (mostra il nuovo testo)
+        // Fade in (lo rendiamo visibile)
         narrative.style.opacity = 1;
     }, 1500); 
 }
@@ -427,11 +425,14 @@ function animate() {
     }
 
     drawWorld(ctx, currentWorld, 1);
-    updateNarrative(0); // Aggiungi questa riga!
-    requestAnimationFrame(animate);
+   // Impostiamo il testo del livello 0 immediatamente all'avvio
+narrative.innerText = texts[0];
+narrative.style.opacity = 1;
+
+// Avviamo il loop del gioco
+requestAnimationFrame(animate);
 }
 
-requestAnimationFrame(animate);
 </script>
 </body>
 </html>
