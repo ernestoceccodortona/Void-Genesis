@@ -42,6 +42,7 @@
         LEVEL: <span id="lvlDisplay">0</span>
         <div id="autoPilot">▶ AUTOPILOT ENGAGED</div>
     </div>
+    <div id="narrative"></div>
     <div id="zoomBtn"><span>*</span></div>
     <canvas id="canvas"></canvas>
 
@@ -205,7 +206,7 @@ zoomBtn.addEventListener('click', () => {
     blueprintRadius = maxDist + 50; 
     
     // SEMPLIFICAZIONE A PARTIRE DAL LIVELLO 3 (Per il livello 4+)
-    if (level >= 2) {
+    if (level >= 1) {
         let dots = [];
         for (let i = 0; i < 40; i++) {
             // Crea puntini "eterni" per simulare rumore bianco interno
