@@ -425,15 +425,15 @@ function animate() {
     }
 
     drawWorld(ctx, currentWorld, 1);
-   // Impostiamo il testo del livello 0 immediatamente all'avvio
-narrative.innerText = texts[0];
-narrative.style.opacity = 1;
-
-// Avviamo il loop del gioco
 requestAnimationFrame(animate);
 }
 
-    requestAnimationFrame(animate);
+// Inizializzazione (FUORI dalla funzione animate)
+narrative.innerText = texts[0];
+narrative.style.opacity = 1;
+
+// Avvio del loop
+requestAnimationFrame(animate);
 
 </script>
 </body>
