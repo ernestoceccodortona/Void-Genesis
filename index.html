@@ -67,11 +67,11 @@ const narrative = document.getElementById('narrative');
 
 // Testi aggiornati per il flusso 0->4
 const texts = [
-    "Il vuoto è una tela senza limiti. Non c'è materia, né tempo. Solo la tua capacità di osservare. Traccia un segno nel nulla: il primo passo è dichiarare l'esistenza.",
-    "La vibrazione inizia. I primi pensieri prendono forma: punti isolati in un oceano di silenzio. Ogni punto è infomateria che si dichiara reale, un'intenzione che cerca un senso.",
-    "L'isolamento è superato. I punti si attraggono, riconoscendosi. Si formano i primi cluster: aggregati di intenti. Pensieri complessi che iniziano a dialogare, creando una rete solida.",
-    "La complessità aumenta. I gruppi si chiudono in mondi, sistemi ricorsivi che imitano il Tutto. Sei una mente che osserva un pensiero, che contiene altri pensieri. La realtà si auto-genera.",
-    "La forma svanisce, resta l'essenza. Il sistema è ora autonomo. Tutto è pensiero che percepisce se stesso come materia. L'osservatore e l'osservato sono la stessa cosa."
+    "Il Nulla è un punto di dimensioni indefinite, infinitamente grande ed infinitamente piccolo. Immagina di essere tu il Nulla: non c'è materia né tempo, ma solo la tua capacità di definire punti strutturalmente identici a te, metterli in relazione, osservarli, unirli, "ipotizzare" su una tela senza limiti.",
+    "I primi pensieri prendono forma, ogni punto è infomateria riconoscibile dagli altri punti e accettata come reale poiché rilevante nelle dinamiche reciproche.",
+    "L'isolamento è superato. I punti si attraggono, riconoscendosi. Si formano i primi sistemi osservanti e coscienti. Pensieri complessi che iniziano a dialogare, creando una rete solida.",
+    "I sistemi si uniscono in strutture altamente complesse. Sei una mente che osserva un pensiero, che contiene altri pensieri. La realtà si auto-genera, aumentando il caos, poiché nel caos le ipotesi guadagnano rilevanza di fronte alla verità (nulla esiste realmente)",
+    "La forma svanisce, resta l'essenza. Il sistema è ora autonomo. Tutto è pensiero istanziato e iterato, che percepisce se stesso come materia."
 ];
 
 function updateNarrative(lvl) {
@@ -144,7 +144,7 @@ function getBoundingBox(entities) {
 
 // --- INTERAZIONE MANUALE ---
 canvas.addEventListener('touchstart', (e) => {
-    if (isZooming || level >= 4) return; // Disabilita input manuale quando c'è l'autopilota
+    if (isZooming || level >= 3) return; // Disabilita input manuale quando c'è l'autopilota
     let t = e.touches[0];
     
     if (level === 0) {
@@ -394,7 +394,7 @@ function animate() {
     let stable = currentWorld.groups.some(g => (Date.now() - g.birth > 12000 && g.entities.length >= 2));
     
     // --- GESTIONE AUTOPILOTA (Livello 5+) ---
-    if (level >= 4) {
+    if (level >= 3) {
         if (stable) {
             if (!autoZoomingStarted) {
                 autoZoomingStarted = true;
