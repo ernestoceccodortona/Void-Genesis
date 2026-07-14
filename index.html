@@ -3,250 +3,392 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Void Genesis - Bubble</title>
+    <title>Void Genesis - Recursive Pro</title>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; touch-action: none; }
+        body { margin: 0; background: #000; overflow: hidden; touch-action: none; font-family: sans-serif; }
         canvas { display: block; width: 100%; height: 100%; }
+        
+        /* Il pulsante richiesto: Bianco, tondo, asterisco nero */
+        #zoomBtn {
+            position: absolute; bottom: 50px; left: 50%; transform: translateX(-50%) scale(0.8);
+            width: 70px; height: 70px; border-radius: 50%;
+            background: #FFF; color: #000; border: none;
+            font-size: 50px; line-height: 80px; text-align: center;
+            cursor: pointer; z-index: 100;
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.4);
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.5s ease, transform 0.5s ease;
+            display: flex; justify-content: center; align-items: center;
+        }
+        #zoomBtn.visible {
+            opacity: 1; pointer-events: all; transform: translateX(-50%) scale(1);
+        }
+        #zoomBtn span { margin-top: 15px; } /* Centratura ottica dell'asterisco */
     </style>
 </head>
 <body>
-<canvas id="canvas"></canvas>
+    <div id="zoomBtn"><span>*</span></div>
+    <canvas id="canvas"></canvas>
 
 <script>
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
+const zoomBtn = document.getElementById('zoomBtn');
 
-// Gestione HDPI/Retina display per grafica nitida
-function adjustCanvasResolution() {
-    const dpr = window.devicePixelRatio || 1;
-    const displayWidth = window.innerWidth;
-    const displayHeight = window.innerHeight;
-    
-    // Imposta la risoluzione interna del canvas
-    canvas.width = displayWidth * dpr;
-    canvas.height = displayHeight * dpr;
-    
-    // Scala il contesto per compensare
-    ctx.scale(dpr, dpr);
-    
-    // Forza l'aliasing netto (niente sfocature)
-    ctx.imageSmoothingEnabled = false;
-}
-
-let points = [];
+// --- STATO DI GIOCO ---
+let level = 0;
+let entities = [];
 let groups = [];
 let isDrawing = false;
 let currentPath = [];
+let currentSnapshot = null; // L'immagine generata dallo zoom precedente
+let isZooming = false;
+let zoomProgress = 0;
 
+// Setup HDPI
+function adjustCanvasResolution() {
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = window.innerWidth * dpr;
+    canvas.height = window.innerHeight * dpr;
+    ctx.scale(dpr, dpr);
+    ctx.imageSmoothingEnabled = true; // Necessario per rimpicciolire bene gli snapshot
+}
 window.addEventListener('resize', adjustCanvasResolution);
-adjustCanvasResolution(); // Imposta risoluzione iniziale
+adjustCanvasResolution();
 
-class Point {
-    constructor(x, y, groupId = null) {
-        // Arrotondiamo le coordinate iniziali per evitare sub-pixel rendering
-        this.x = Math.round(x);
-        this.y = Math.round(y);
-        this.vx = (Math.random() - 0.5) * 0.4;
-        this.vy = (Math.random() - 0.5) * 0.4;
+// --- CLASSI ---
+class Entity {
+    constructor(x, y, isSystem = false) {
+        this.x = x; this.y = y;
+        // Sistemi (Level > 0) si muovono più lentamente
+        this.vx = (Math.random() - 0.5) * (isSystem ? 0.2 : 0.4);
+        this.vy = (Math.random() - 0.5) * (isSystem ? 0.2 : 0.4);
         this.birth = Date.now();
-        this.lifeSpan = 10000; 
-        this.baseSize = 2.5; // Leggermente più grande
-        this.size = this.baseSize;
-        this.groupId = groupId;
+        this.isSystem = isSystem;
+        this.groupId = null;
+        
+        if (!isSystem) {
+            this.lifeSpan = 10000; 
+            this.baseSize = 2.5;
+            this.size = this.baseSize;
+        } else {
+            this.lifeSpan = Infinity; // I sistemi sono eterni
+            this.baseSize = 25; // Dimensione fissa della bolla-sistema
+            this.size = this.baseSize;
+        }
     }
+
     update() {
         this.x += this.vx;
         this.y += this.vy;
         
-        // Rimbalzo semplice sui bordi per non farli uscire
-        if(this.x < 0 || this.x > window.innerWidth) this.vx *= -1;
-        if(this.y < 0 || this.y > window.innerHeight) this.vy *= -1;
+        // Rimbalzo bordi
+        if(this.x < 10 || this.x > window.innerWidth - 10) this.vx *= -1;
+        if(this.y < 10 || this.y > window.innerHeight - 10) this.vy *= -1;
 
-        let age = Date.now() - this.birth;
-        let remaining = 1 - (age / this.lifeSpan);
-        
-        // Calcolo dimensione arrotondato per pixel perfect
-        this.size = Math.max(0, Math.round(this.baseSize * remaining * 10) / 10);
-        
-        return this.size > 0;
+        if (!this.isSystem) {
+            let age = Date.now() - this.birth;
+            let remaining = 1 - (age / this.lifeSpan);
+            this.size = Math.max(0, this.baseSize * remaining);
+            return this.size > 0;
+        }
+        return true;
+    }
+
+    draw(context) {
+        if (!this.isSystem) {
+            context.fillStyle = '#FFF';
+            context.beginPath();
+            context.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+            context.fill();
+        } else {
+            // Disegna lo snapshot del livello precedente dentro un cerchio
+            context.save();
+            context.beginPath();
+            context.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+            context.fillStyle = '#050505'; // Sfondo scuro per coprire le linee sottostanti
+            context.fill();
+            context.clip(); // Maschera circolare
+
+            if (currentSnapshot) {
+                // Centra e scala l'immagine per farla entrare nel cerchio
+                context.translate(this.x, this.y);
+                let scale = (this.size * 2) / Math.max(currentSnapshot.w, currentSnapshot.h);
+                context.scale(scale, scale);
+                context.drawImage(currentSnapshot.img, -currentSnapshot.w/2, -currentSnapshot.h/2);
+            }
+            context.restore();
+            
+            // Bordo del sistema
+            context.strokeStyle = 'rgba(255,255,255,0.8)';
+            context.lineWidth = 1;
+            context.beginPath();
+            context.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+            context.stroke();
+        }
     }
 }
 
-// Interazione Touch
+// --- INTERAZIONI ---
 canvas.addEventListener('touchstart', (e) => {
+    if (isZooming) return;
     let touch = e.touches[0];
-    if (e.touches.length === 1) {
-        // Aggiungi punto singolo
-        points.push(new Point(touch.clientX, touch.clientY));
+    
+    if (level === 0) {
+        entities.push(new Entity(touch.clientX, touch.clientY, false));
+        isDrawing = true;
+        currentPath = [{x: touch.clientX, y: touch.clientY}];
+    } else {
+        // Al livello > 0, genera direttamente un Sistema completo!
+        entities.push(new Entity(touch.clientX, touch.clientY, true));
     }
-    isDrawing = true;
-    currentPath = [{x: touch.clientX, y: touch.clientY}];
 });
 
 canvas.addEventListener('touchmove', (e) => {
-    if (isDrawing) {
+    if (isDrawing && level === 0) {
         currentPath.push({x: e.touches[0].clientX, y: e.touches[0].clientY});
     }
 });
 
 canvas.addEventListener('touchend', () => {
     isDrawing = false;
-    if (currentPath.length > 5) {
-        let newGroupPoints = [];
-        points.forEach(p => {
-            // Controlla se il punto è libero e dentro il cerchiamento
-            if (!p.groupId && isPointInPolygon(p, currentPath)) {
-                newGroupPoints.push(p);
+    if (level === 0 && currentPath.length > 5) {
+        let newGroup = [];
+        entities.forEach(p => {
+            if (!p.groupId && !p.isSystem && isPointInPolygon(p, currentPath)) {
+                newGroup.push(p);
             }
         });
-        
-        if (newGroupPoints.length > 1) {
-            const groupId = Date.now();
-            newGroupPoints.forEach(p => p.groupId = groupId);
-            
-            // Calcola centro e raggio approssimativo della bolla
-            let bounds = getBoundingBox(newGroupPoints);
-            let centerX = (bounds.minX + bounds.maxX) / 2;
-            let centerY = (bounds.minY + bounds.maxY) / 2;
-            let radius = Math.max(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY) / 2 + 20;
-
-            groups.push({
-                id: groupId, 
-                points: newGroupPoints, 
-                lastReproduction: Date.now(),
-                bubble: { x: centerX, y: centerY, radius: radius, pulse: 0 }
-            });
-        }
+        if (newGroup.length > 1) createGroup(newGroup);
     }
     currentPath = [];
 });
 
+function createGroup(members) {
+    const groupId = Date.now() + Math.random();
+    members.forEach(m => m.groupId = groupId);
+    groups.push({
+        id: groupId, 
+        entities: members, 
+        birth: Date.now(),
+        lastReproduction: Date.now(),
+        bubble: { x: members[0].x, y: members[0].y, radius: 10, pulse: 0 }
+    });
+}
+
+// Utility Poligono
 function isPointInPolygon(point, vs) {
-    let x = point.x, y = point.y;
-    let inside = false;
+    let x = point.x, y = point.y, inside = false;
     for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
-        let xi = vs[i].x, yi = vs[i].y;
-        let xj = vs[j].x, yj = vs[j].y;
+        let xi = vs[i].x, yi = vs[i].y, xj = vs[j].x, yj = vs[j].y;
         let intersect = ((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
         if (intersect) inside = !inside;
     }
     return inside;
 }
 
+// --- MECCANICA DI ZOOM ---
+zoomBtn.addEventListener('click', () => {
+    if(isZooming) return;
+    isZooming = true;
+    zoomBtn.classList.remove('visible');
+
+    // 1. Scatta la "Fotografia" di tutto ciò che c'è sullo schermo
+    takeSnapshot();
+    
+    // 2. Avvia l'animazione di rimpicciolimento
+    zoomProgress = 0;
+});
+
+function takeSnapshot() {
+    // Troviamo il bounding box di tutto
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    entities.forEach(e => {
+        if(e.x < minX) minX = e.x; if(e.x > maxX) maxX = e.x;
+        if(e.y < minY) minY = e.y; if(e.y > maxY) maxY = e.y;
+    });
+    if(minX === Infinity) { minX = 0; maxX = window.innerWidth; minY = 0; maxY = window.innerHeight; }
+    
+    let padding = 100;
+    let w = (maxX - minX) + padding*2;
+    let h = (maxY - minY) + padding*2;
+
+    let offCanvas = document.createElement('canvas');
+    offCanvas.width = w * 2; // Qualità raddoppiata per lo zoom
+    offCanvas.height = h * 2;
+    let oCtx = offCanvas.getContext('2d');
+    oCtx.scale(2, 2);
+    oCtx.translate(-(minX - padding), -(minY - padding));
+
+    // Disegna lo stato puro (senza sfondi o UI)
+    drawScene(oCtx, entities, groups);
+
+    currentSnapshot = { img: offCanvas, w: w, h: h };
+}
+
+function finalizeZoom() {
+    isZooming = false;
+    level++;
+    
+    // Cancella il mondo
+    entities = [];
+    groups = [];
+    
+    // Crea LA prima entità del nuovo livello (il super-sistema appena compresso)
+    entities.push(new Entity(window.innerWidth / 2, window.innerHeight / 2, true));
+}
+
+// --- LOGICA PRINCIPALE E RENDER ---
 function getBoundingBox(pts) {
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     pts.forEach(p => {
-        if (p.x < minX) minX = p.x;
-        if (p.x > maxX) maxX = p.x;
-        if (p.y < minY) minY = p.y;
-        if (p.y > maxY) maxY = p.y;
+        if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
     });
     return {minX, maxX, minY, maxY};
 }
 
-function animate() {
-    // Pulisci schermo con dissolvenza (leggermente più scura per effetto scia)
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+// Funzione isolata per disegnare la scena (utile sia a video che per lo snapshot)
+function drawScene(context, ents, grps) {
+    // 1. Connessioni interne ai gruppi
+    grps.forEach(g => {
+        context.strokeStyle = 'rgba(150, 150, 150, 0.3)';
+        context.lineWidth = 0.5;
+        context.beginPath();
+        let maxLines = Math.min(g.entities.length * 2, 50); 
+        for(let k=0; k<maxLines; k++) {
+            let i = Math.floor(Math.random() * g.entities.length);
+            let j = Math.floor(Math.random() * g.entities.length);
+            context.moveTo(g.entities[i].x, g.entities[i].y);
+            context.lineTo(g.entities[j].x, g.entities[j].y);
+        }
+        context.stroke();
 
-    // Disegno traccia utente (momentanea)
+        // Disegno Bolla
+        let bounds = getBoundingBox(g.entities);
+        let centerX = (bounds.minX + bounds.maxX) / 2;
+        let centerY = (bounds.minY + bounds.maxY) / 2;
+        let targetRadius = Math.max(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY) / 2 + (level === 0 ? 15 : 25);
+        
+        g.bubble.x += (centerX - g.bubble.x) * 0.1;
+        g.bubble.y += (centerY - g.bubble.y) * 0.1;
+        g.bubble.radius += (targetRadius - g.bubble.radius) * 0.1;
+        g.bubble.pulse = Math.sin(Date.now() / 500) * (g.entities.length * (level === 0 ? 0.2 : 0.5));
+
+        context.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+        context.lineWidth = 1.5;
+        context.beginPath();
+        context.arc(g.bubble.x, g.bubble.y, Math.max(10, g.bubble.radius + g.bubble.pulse), 0, Math.PI * 2);
+        context.stroke();
+    });
+
+    // 2. Disegno Entità (Punti o Sistemi)
+    ents.forEach(e => e.draw(context));
+}
+
+function animate() {
+    // Effetto scia
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+
+    // Animazione di rimpicciolimento (Zoom Out)
+    if (isZooming) {
+        zoomProgress += 0.02; // Circa 1 secondo a 60fps
+        let ease = 1 - Math.pow(1 - zoomProgress, 3); // Decelerazione morbida
+        let scale = 1 - (ease * 0.9); // Scala giù fino a 0.1
+
+        ctx.save();
+        ctx.translate(window.innerWidth/2, window.innerHeight/2);
+        ctx.scale(scale, scale);
+        ctx.translate(-window.innerWidth/2, -window.innerHeight/2);
+        
+        drawScene(ctx, entities, groups);
+        ctx.restore();
+
+        if (zoomProgress >= 1) finalizeZoom();
+        requestAnimationFrame(animate);
+        return; // Salta logica se sta zoomando
+    }
+
+    // --- AGGIORNAMENTO LOGICA ---
+
+    // AUTO-CONNESSIONE (Solo per Sistemi creati con i Tap nei livelli avanzati)
+    if (level > 0 && Math.random() < 0.1) { // Controllo scaglionato per performance
+        let freeSystems = entities.filter(e => !e.groupId);
+        for(let i = 0; i < freeSystems.length; i++) {
+            for(let j = i + 1; j < freeSystems.length; j++) {
+                let s1 = freeSystems[i], s2 = freeSystems[j];
+                let dist = Math.hypot(s1.x - s2.x, s1.y - s2.y);
+                if (dist < 120) { // Distanza magnetica
+                    createGroup([s1, s2]);
+                    break;
+                }
+            }
+            // Prova ad attaccarsi a un gruppo esistente
+            if (!freeSystems[i].groupId) {
+                groups.forEach(g => {
+                    let dist = Math.hypot(freeSystems[i].x - g.bubble.x, freeSystems[i].y - g.bubble.y);
+                    if (dist < g.bubble.radius + 60) {
+                        freeSystems[i].groupId = g.id;
+                        g.entities.push(freeSystems[i]);
+                    }
+                });
+            }
+        }
+    }
+
+    // Aggiornamento Entità
+    entities = entities.filter(e => e.update());
+
+    // Aggiornamento Gruppi e Riproduzione
+    let stableFound = false;
+    
+    for (let i = groups.length - 1; i >= 0; i--) {
+        let g = groups[i];
+        g.entities = g.entities.filter(e => e.size > 0);
+        
+        if (g.entities.length === 0) {
+            groups.splice(i, 1);
+            continue;
+        }
+
+        // Controllo Stabilità: un gruppo sopravvive da 12 secondi ed ha > 1 membro
+        let age = Date.now() - g.birth;
+        if (age > 12000 && g.entities.length >= 2) stableFound = true;
+
+        // Riproduzione
+        let reproduceTime = 3000 + (g.entities.length * 150);
+        if (Date.now() - g.lastReproduction > reproduceTime) {
+            let angle = Math.random() * Math.PI * 2;
+            let dist = g.bubble.radius + 15;
+            let spawnX = g.bubble.x + Math.cos(angle)*dist;
+            let spawnY = g.bubble.y + Math.sin(angle)*dist;
+            
+            // Se livello 0 spawna un punto, altrimenti uno clona un sistema
+            let newEnt = new Entity(spawnX, spawnY, level > 0);
+            newEnt.groupId = g.id;
+            entities.push(newEnt);
+            g.entities.push(newEnt);
+            g.lastReproduction = Date.now();
+        }
+    }
+
+    // Gestione visibilità pulsante Zoom
+    if (stableFound && !isZooming) zoomBtn.classList.add('visible');
+    else zoomBtn.classList.remove('visible');
+
+    // Rendering della traccia di disegno (Level 0)
     if (isDrawing && currentPath.length > 1) {
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(currentPath[0].x, currentPath[0].y);
-        for(let i=1; i<currentPath.length; i+=2) { // Ottimizzazione: salta punti
-            ctx.lineTo(currentPath[i].x, currentPath[i].y);
-        }
+        for(let i=1; i<currentPath.length; i+=2) ctx.lineTo(currentPath[i].x, currentPath[i].y);
         ctx.stroke();
     }
 
-    // Aggiorna e Disegno Punti Liberi
-    let freePoints = points.filter(p => p.groupId === null);
-    points = points.filter(p => p.update()); // Aggiorna tutti, rimuovi morti
-    
-    ctx.fillStyle = 'white';
-    freePoints.forEach(p => {
-        ctx.beginPath();
-        // Arrotondiamo per il pixel perfect
-        ctx.arc(Math.round(p.x), Math.round(p.y), p.size, 0, Math.PI * 2);
-        ctx.fill();
-    });
-
-    // Gestione Gruppi, Riproduzione e Bolle
-    for (let i = groups.length - 1; i >= 0; i--) {
-        let g = groups[i];
-        
-        // Filtra i punti morti dal gruppo
-        g.points = g.points.filter(p => p.size > 0);
-        
-        if (g.points.length === 0) {
-            groups.splice(i, 1);
-            continue;
-        }
-
-        // --- Logica Bolla (Bubble) ---
-        if (g.points.length > 1) {
-            // Ricalcola centro e raggio in base alla posizione attuale dei punti
-            let bounds = getBoundingBox(g.points);
-            g.realCenterX = (bounds.minX + bounds.maxX) / 2;
-            g.realCenterY = (bounds.minY + bounds.maxY) / 2;
-            let targetRadius = Math.max(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY) / 2 + 15;
-            
-            // Smussamento del movimento della bolla
-            g.bubble.x += (g.realCenterX - g.bubble.x) * 0.1;
-            g.bubble.y += (g.realCenterY - g.bubble.y) * 0.1;
-            g.bubble.radius += (targetRadius - g.bubble.radius) * 0.1;
-
-            // Effetto respiro (pulsazione leggera basata sul numero di punti)
-            g.bubble.pulse = Math.sin(Date.now() / 500) * (g.points.length * 0.2);
-
-            // Disegno Bolla
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)'; // Bordo bianco semi-trasparente
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            ctx.arc(Math.round(g.bubble.x), Math.round(g.bubble.y), Math.max(10, g.bubble.radius + g.bubble.pulse), 0, Math.PI * 2);
-            ctx.stroke();
-        }
-        // ---------------------------
-
-        // Riproduzione (rallentata se il gruppo è grande)
-        let reproduceTime = 3000 + (g.points.length * 100);
-        if (Date.now() - g.lastReproduction > reproduceTime) {
-            let p = g.points[Math.floor(Math.random() * g.points.length)];
-            // Genera leggermente fuori dal bordo del gruppo
-            let angle = Math.random() * Math.PI * 2;
-            let dist = g.bubble.radius + 10;
-            let newP = new Point(g.bubble.x + Math.cos(angle)*dist, g.bubble.y + Math.sin(angle)*dist, g.id);
-            points.push(newP);
-            g.points.push(newP);
-            g.lastReproduction = Date.now();
-        }
-
-        // Connessioni interne (linee grigie)
-        ctx.strokeStyle = 'rgba(150, 150, 150, 0.2)';
-        ctx.lineWidth = 0.5;
-        ctx.beginPath();
-        // Ottimizzazione: non collegare tutti con tutti se troppi, cala il framerate
-        let maxLines = Math.min(g.points.length * 3, 100); 
-        for(let k=0; k<maxLines; k++) {
-            let iIdx = Math.floor(Math.random() * g.points.length);
-            let jIdx = Math.floor(Math.random() * g.points.length);
-            if(iIdx !== jIdx) {
-                ctx.moveTo(Math.round(g.points[iIdx].x), Math.round(g.points[iIdx].y));
-                ctx.lineTo(Math.round(g.points[jIdx].x), Math.round(g.points[jIdx].y));
-            }
-        }
-        ctx.stroke();
-        
-        // Disegno Punti del gruppo
-        ctx.fillStyle = 'white';
-        g.points.forEach(p => {
-            ctx.beginPath();
-            ctx.arc(Math.round(p.x), Math.round(p.y), p.size, 0, Math.PI * 2);
-            ctx.fill();
-        });
-    }
+    // Disegno Scena
+    drawScene(ctx, entities, groups);
 
     requestAnimationFrame(animate);
 }
